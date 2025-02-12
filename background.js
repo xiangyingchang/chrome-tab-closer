@@ -4,7 +4,7 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     const currentTime = Date.now();
     await chrome.storage.local.set({ [activeInfo.tabId]: currentTime });
   } catch (error) {
-    console.error('Failed to update tab access time:', error);
+    // 静默处理错误
   }
 });
 
@@ -13,17 +13,8 @@ chrome.alarms.create('checkInactiveTabs', { periodInMinutes: 5 });
 
 // 合并所有定时任务的处理
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  try {
-    switch (alarm.name) {
-      case 'checkInactiveTabs':
-        await checkAndCloseInactiveTabs();
-        break;
-      case 'cleanupStorage':
-        await cleanupOldData();
-        break;
-    }
-  } catch (error) {
-    console.error(`Failed to handle alarm ${alarm.name}:`, error);
+  if (alarm.name === 'checkInactiveTabs') {
+    await checkAndCloseInactiveTabs();
   }
 });
 
@@ -38,30 +29,50 @@ function isValidUrl(url) {
 
 function checkAndCloseInactiveTabs() {
   chrome.storage.local.get(['whitelist', 'autoCloseEnabled', 'inactiveThreshold', 'testMode'], async (result) => {
-    if (!result.autoCloseEnabled) return;
+    if (!result.autoCloseEnabled) {
+      return;
+    }
     
     const whitelist = result.whitelist || [];
     const defaultThreshold = 24 * 60 * 60 * 1000;
     const inactiveTime = result.testMode ? 60 * 1000 : (result.inactiveThreshold || defaultThreshold);
-    const currentTime = Date.now();
     
-    // 批量获取所有标签的最后访问时间
+    // 获取当前活跃的标签
+    const currentTabs = await chrome.tabs.query({ active: true });  // 修改：获取所有窗口的活跃标签
+    const activeTabIds = currentTabs.map(tab => tab.id);  // 修改：保存所有活跃标签的ID
+
     const tabs = await chrome.tabs.query({});
+    
     const tabIds = tabs.map(tab => tab.id.toString());
     const lastAccessTimes = await chrome.storage.local.get(tabIds);
     
-    tabs.forEach(tab => {
-      if (!isValidUrl(tab.url)) return;
+    for (const tab of tabs) {
+      // 跳过所有活跃的标签
+      if (activeTabIds.includes(tab.id)) {  // 修改：检查是否是活跃标签
+        continue;
+      }
+
+      if (!isValidUrl(tab.url)) {
+        continue;
+      }
       
       const domain = new URL(tab.url).hostname;
-      if (whitelist.includes(domain)) return;
-      
-      const lastAccessTime = lastAccessTimes[tab.id] || currentTime;
-      if (currentTime - lastAccessTime >= inactiveTime) {
-        showCloseNotification(tab);
-        chrome.tabs.remove(tab.id);
+      if (whitelist.includes(domain)) {
+        continue;
       }
-    });
+      
+      const lastAccessTime = lastAccessTimes[tab.id] || Date.now();
+      const timeSinceLastAccess = Date.now() - lastAccessTime;
+      
+      if (timeSinceLastAccess >= inactiveTime) {
+        try {
+          await chrome.tabs.remove(tab.id);
+          showCloseNotification(tab);
+        } catch (error) {
+          // 静默处理错误
+        }
+      }
+    }
   });
 }
 
@@ -72,7 +83,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       const currentTime = Date.now();
       await chrome.storage.local.set({ [tabId]: currentTime });
     } catch (error) {
-      console.error('Failed to update tab time on update:', error);
+      // 静默处理错误
     }
   }
 });
@@ -82,7 +93,7 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
   try {
     await chrome.storage.local.remove(tabId.toString());
   } catch (error) {
-    console.error('Failed to cleanup tab data:', error);
+    // 静默处理错误
   }
 });
 
@@ -93,7 +104,7 @@ chrome.webNavigation.onCommitted.addListener(async (details) => {
       const currentTime = Date.now();
       await chrome.storage.local.set({ [details.tabId]: currentTime });
     } catch (error) {
-      console.error('Failed to update tab time on navigation:', error);
+      // 静默处理错误
     }
   }
 });
@@ -109,32 +120,9 @@ chrome.runtime.onStartup.addListener(async () => {
     }, {});
     await chrome.storage.local.set(updates);
   } catch (error) {
-    console.error('Failed to initialize tab times:', error);
+    // 静默处理错误
   }
 });
-
-async function cleanupOldData() {
-  try {
-    const currentTime = Date.now();
-    const data = await chrome.storage.local.get(null);
-    const keysToRemove = Object.keys(data).filter(key => {
-      // 只处理数字类型的key（tabId）
-      return !isNaN(key) && currentTime - data[key] > 7 * 24 * 60 * 60 * 1000;
-    });
-    if (keysToRemove.length > 0) {
-      await chrome.storage.local.remove(keysToRemove);
-      logDebug('Cleaned up old data', keysToRemove);
-    }
-  } catch (error) {
-    console.error('Failed to cleanup old data:', error);
-  }
-}
-
-function logDebug(message, data = null) {
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[Tab Closer] ${message}`, data || '');
-  }
-}
 
 // 添加通知点击处理
 chrome.notifications.onClicked.addListener((notificationId) => {
@@ -144,30 +132,37 @@ chrome.notifications.onClicked.addListener((notificationId) => {
 
 // 修改通知创建
 function showCloseNotification(tab) {
-  chrome.notifications.create(`close-${tab.id}`, {
-    type: 'basic',
-    iconUrl: 'icon.svg',
-    title: '标签页自动关闭提醒',
-    message: `标签 "${tab.title}" 已被自动关闭`,
-    requireInteraction: false, // 自动关闭通知
-    priority: 0
-  });
+  try {
+    chrome.notifications.create(`close-${tab.id}`, {
+      type: 'basic',
+      iconUrl: '/icon-48.png',  // 使用 PNG 图标
+      title: '标签页自动关闭提醒',
+      message: `标签 "${tab.title}" 已被自动关闭`,
+      requireInteraction: false,
+      priority: 0
+    });
+  } catch (error) {
+    // 静默处理错误
+  }
 }
 
 // 初始化定时任务
-function initAlarms() {
-  chrome.alarms.create('checkInactiveTabs', { periodInMinutes: 5 });
-  chrome.alarms.create('cleanupStorage', { periodInMinutes: 60 });
+async function initAlarms() {
+  const result = await chrome.storage.local.get(['testMode']);
+  const checkInterval = result.testMode ? 0.5 : 5;
+  await chrome.alarms.create('checkInactiveTabs', { 
+    periodInMinutes: checkInterval
+  });
 }
 
 // 在插件启动和浏览器启动时初始化
 chrome.runtime.onInstalled.addListener(initAlarms);
 chrome.runtime.onStartup.addListener(initAlarms);
 
-const CONFIG = {
-  CHECK_INTERVAL: 5, // 检查间隔（分钟）
-  CLEANUP_INTERVAL: 60, // 清理间隔（分钟）
-  DEFAULT_INACTIVE_THRESHOLD: 24 * 60 * 60 * 1000, // 默认不活跃阈值（24小时）
-  TEST_MODE_THRESHOLD: 60 * 1000, // 测试模式阈值（1分钟）
-  OLD_DATA_THRESHOLD: 7 * 24 * 60 * 60 * 1000 // 过期数据阈值（7天）
-};
+// 在测试模式切换时更新检查间隔
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  if (namespace === 'local' && changes.testMode) {
+    const checkInterval = changes.testMode.newValue ? 0.5 : 5;
+    chrome.alarms.create('checkInactiveTabs', { periodInMinutes: checkInterval });
+  }
+});
