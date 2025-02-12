@@ -15,5 +15,6 @@
   },
   "icons": {
     "128": "icon.svg"
-  }
+  },
+  "update_url": "https://example.com/updates.xml"
 }

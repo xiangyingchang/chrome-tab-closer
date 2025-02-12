@@ -37,11 +37,26 @@ document.getElementById('autoCloseInactive').addEventListener('change', async fu
 });
 
 // 不活跃时间阈值控制
-document.getElementById('inactiveThreshold').addEventListener('change', function(e) {
-  const hours = parseInt(e.target.value) || 24;
-  const threshold = hours * 60 * 60 * 1000; // 转换为毫秒
-  chrome.storage.local.set({ inactiveThreshold: threshold });
-});
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// 使用防抖优化输入处理
+document.getElementById('inactiveThreshold').addEventListener('change', 
+  debounce(function(e) {
+    const hours = parseInt(e.target.value) || 24;
+    const threshold = hours * 60 * 60 * 1000;
+    updateSettings('inactiveThreshold', threshold);
+  }, 300)
+);
 
 // 添加测试模式控制
 document.getElementById('testMode').addEventListener('change', function(e) {
@@ -139,4 +154,81 @@ async function updateSettings(key, value) {
   } catch (error) {
     console.error(`Failed to update ${key}:`, error);
   }
+}
+
+// 添加导出白名单功能
+function exportWhitelist() {
+  chrome.storage.local.get(['whitelist'], (result) => {
+    const whitelist = result.whitelist || [];
+    const blob = new Blob([JSON.stringify(whitelist, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tab-closer-whitelist.json';
+    a.click();
+    
+    URL.revokeObjectURL(url);
+  });
+}
+
+// 添加导入白名单功能
+function importWhitelist(file) {
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const whitelist = JSON.parse(e.target.result);
+      if (Array.isArray(whitelist)) {
+        await chrome.storage.local.set({ whitelist });
+        renderWhitelist(whitelist);
+      }
+    } catch (error) {
+      alert('导入失败：无效的文件格式');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// 仅在开发模式下添加测试功能
+if (process.env.NODE_ENV === 'development') {
+  // 添加测试面板
+  function addTestPanel() {
+    const testPanel = document.createElement('div');
+    testPanel.className = 'settings-section';
+    testPanel.innerHTML = `
+      <h2>测试工具</h2>
+      <div class="input-group">
+        <button id="checkStorage">检查存储数据</button>
+        <button id="simulateInactive">模拟不活跃</button>
+        <button id="clearAllData">清除所有数据</button>
+      </div>
+      <pre id="testOutput" style="max-height: 200px; overflow: auto;"></pre>
+    `;
+    document.body.appendChild(testPanel);
+    
+    // 添加测试功能
+    document.getElementById('checkStorage').addEventListener('click', async () => {
+      const data = await chrome.storage.local.get(null);
+      document.getElementById('testOutput').textContent = JSON.stringify(data, null, 2);
+    });
+    
+    document.getElementById('simulateInactive').addEventListener('click', async () => {
+      const tabs = await chrome.tabs.query({});
+      const time = Date.now() - (2 * 60 * 1000); // 2分钟前
+      const updates = tabs.reduce((acc, tab) => {
+        acc[tab.id] = time;
+        return acc;
+      }, {});
+      await chrome.storage.local.set(updates);
+      document.getElementById('testOutput').textContent = '已将所有标签设置为2分钟前访问';
+    });
+    
+    document.getElementById('clearAllData').addEventListener('click', async () => {
+      await chrome.storage.local.clear();
+      document.getElementById('testOutput').textContent = '已清除所有存储数据';
+    });
+  }
+  
+  // 在页面加载完成后添加测试面板
+  document.addEventListener('DOMContentLoaded', addTestPanel);
 }
