@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "自动关闭标签页",
+  "version": "1.0",
+  "description": "自动关闭Chrome标签页的简单插件",
+  "permissions": ["tabs", "alarms", "storage"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.svg"
+  },
+  "icons": {
+    "128": "icon.svg"
+  }
+}

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    body {
+      width: 320px;
+      padding: 16px;
+      max-height: 600px;
+      overflow-y: auto;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      margin: 0;
+      background-color: #f8f9fa;
+      color: #212529;
+    }
+
+    .header {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .header h1 {
+      font-size: 18px;
+      font-weight: 500;
+      color: #1a73e8;
+      margin: 0;
+    }
+
+    .action-buttons {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      background-color: #1a73e8;
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    button:hover {
+      background-color: #1557b0;
+    }
+
+    button:active {
+      transform: scale(0.98);
+    }
+
+    button .material-icons {
+      font-size: 18px;
+    }
+
+    .settings-section {
+      background-color: white;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .settings-section h2 {
+      font-size: 16px;
+      font-weight: 500;
+      color: #1a73e8;
+      margin: 0 0 16px 0;
+    }
+
+    .input-group {
+      margin-bottom: 16px;
+    }
+
+    .input-group:last-child {
+      margin-bottom: 0;
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      color: #5f6368;
+    }
+
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: #1a73e8;
+    }
+
+    input[type="number"] {
+      width: 80px;
+      padding: 8px;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #3c4043;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #3c4043;
+      box-sizing: border-box;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+    }
+
+    #whitelistContainer {
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 12px;
+    }
+
+    .whitelist-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px;
+      background-color: #f8f9fa;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .whitelist-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .whitelist-item span {
+      flex: 1;
+      font-size: 13px;
+      color: #3c4043;
+      margin-right: 8px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .whitelist-item button {
+      padding: 4px 8px;
+      background-color: #dc3545;
+      font-size: 12px;
+      min-width: 60px;
+    }
+
+    .whitelist-item button:hover {
+      background-color: #c82333;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>标签页管理器</h1>
+  </div>
+
+  <div class="action-buttons">
+    <button id="closeCurrent">
+      <span class="material-icons">close</span>
+      关闭当前标签页
+    </button>
+    <button id="closeOthers">
+      <span class="material-icons">filter_none</span>
+      关闭其他标签页
+    </button>
+    <button id="closeAll">
+      <span class="material-icons">clear_all</span>
+      关闭所有标签页
+    </button>
+  </div>
+
+  <div class="settings-section">
+    <h2>自动清理设置</h2>
+    <div class="input-group">
+      <label>
+        <input type="checkbox" id="autoCloseInactive">
+        <span>自动关闭不活跃标签</span>
+      </label>
+    </div>
+    <div class="input-group">
+      <label>
+        不活跃时间阈值
+        <input type="number" id="inactiveThreshold" min="1" value="24">
+        <span>小时</span>
+      </label>
+    </div>
+
+    <div class="input-group">
+      <label>
+        <input type="checkbox" id="testMode">
+        <span>测试模式（1分钟）</span>
+      </label>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
