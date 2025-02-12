@@ -163,6 +163,48 @@
     .whitelist-item button:hover {
       background-color: #c82333;
     }
+
+    .whitelist-input-container {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .whitelist-input-container input {
+      flex: 1;
+    }
+
+    .whitelist-input-container button {
+      padding: 8px;
+      min-width: unset;
+      width: auto;
+    }
+
+    .whitelist-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px;
+      background-color: #f8f9fa;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+
+    .whitelist-item .material-icons {
+      font-size: 16px;
+    }
+
+    .whitelist-item button {
+      padding: 4px 8px;
+      background-color: #dc3545;
+      min-width: unset;
+    }
+
+    #whitelistContainer {
+      margin-top: 16px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
   </style>
 </head>
 <body>
@@ -206,6 +248,21 @@
         <input type="checkbox" id="testMode">
         <span>测试模式（1分钟）</span>
       </label>
+    </div>
+
+    <div class="input-group">
+      <label>
+        添加白名单域名
+        <div class="whitelist-input-container">
+          <input type="text" id="whitelistInput" placeholder="例如: google.com">
+          <button id="addWhitelist">
+            <span class="material-icons">add</span>
+          </button>
+        </div>
+      </label>
+      <div id="whitelistContainer">
+        <!-- 白名单项会动态插入到这里 -->
+      </div>
     </div>
   </div>
 

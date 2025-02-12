@@ -1,0 +1,5 @@
+export const DEFAULT_CONFIG = {
+  CHECK_INTERVAL: 5, // 分钟
+  DEFAULT_INACTIVE_THRESHOLD: 24 * 60 * 60 * 1000, // 24小时
+  TEST_MODE_THRESHOLD: 60 * 1000, // 1分钟
+}; 

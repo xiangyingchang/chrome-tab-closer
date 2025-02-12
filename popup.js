@@ -23,13 +23,17 @@ document.getElementById('closeAll').addEventListener('click', function() {
 });
 
 // 自动关闭不活跃标签的开关控制
-document.getElementById('autoCloseInactive').addEventListener('change', function(e) {
-  if (e.target.checked) {
-    chrome.alarms.create('checkInactiveTabs', { periodInMinutes: 5 });
-  } else {
-    chrome.alarms.clear('checkInactiveTabs');
+document.getElementById('autoCloseInactive').addEventListener('change', async function(e) {
+  try {
+    if (e.target.checked) {
+      await chrome.alarms.create('checkInactiveTabs', { periodInMinutes: 5 });
+    } else {
+      await chrome.alarms.clear('checkInactiveTabs');
+    }
+    await updateSettings('autoCloseEnabled', e.target.checked);
+  } catch (error) {
+    console.error('Failed to update auto close setting:', error);
   }
-  chrome.storage.local.set({ autoCloseEnabled: e.target.checked });
 });
 
 // 不活跃时间阈值控制
@@ -38,8 +42,6 @@ document.getElementById('inactiveThreshold').addEventListener('change', function
   const threshold = hours * 60 * 60 * 1000; // 转换为毫秒
   chrome.storage.local.set({ inactiveThreshold: threshold });
 });
-
-
 
 // 添加测试模式控制
 document.getElementById('testMode').addEventListener('change', function(e) {
@@ -52,3 +54,89 @@ chrome.storage.local.get(['autoCloseEnabled', 'testMode', 'inactiveThreshold'], 
   document.getElementById('testMode').checked = result.testMode || false;
   document.getElementById('inactiveThreshold').value = result.inactiveThreshold ? (result.inactiveThreshold / (60 * 60 * 1000)) : 24;
 });
+
+// 白名单管理
+function initWhitelist() {
+  chrome.storage.local.get(['whitelist'], (result) => {
+    const whitelist = result.whitelist || [];
+    renderWhitelist(whitelist);
+  });
+}
+
+function renderWhitelist(whitelist) {
+  const container = document.getElementById('whitelistContainer');
+  container.innerHTML = '';
+  
+  whitelist.forEach(domain => {
+    const item = document.createElement('div');
+    item.className = 'whitelist-item';
+    
+    const domainText = document.createElement('span');
+    domainText.textContent = domain;
+    
+    const removeButton = document.createElement('button');
+    removeButton.innerHTML = '<span class="material-icons">delete</span>';
+    removeButton.onclick = () => removeFromWhitelist(domain);
+    
+    item.appendChild(domainText);
+    item.appendChild(removeButton);
+    container.appendChild(item);
+  });
+}
+
+function addToWhitelist() {
+  const input = document.getElementById('whitelistInput');
+  const domain = input.value.trim().toLowerCase();
+  
+  if (!domain) return;
+  
+  try {
+    // 验证输入的是否是有效的域名格式
+    new URL(`http://${domain}`);
+    
+    chrome.storage.local.get(['whitelist'], (result) => {
+      const whitelist = result.whitelist || [];
+      if (!whitelist.includes(domain)) {
+        whitelist.push(domain);
+        chrome.storage.local.set({ whitelist }, () => {
+          renderWhitelist(whitelist);
+          input.value = '';
+        });
+      }
+    });
+  } catch (error) {
+    alert('请输入有效的域名');
+  }
+}
+
+function removeFromWhitelist(domain) {
+  chrome.storage.local.get(['whitelist'], (result) => {
+    const whitelist = (result.whitelist || []).filter(d => d !== domain);
+    chrome.storage.local.set({ whitelist }, () => {
+      renderWhitelist(whitelist);
+    });
+  });
+}
+
+// 初始化白名单界面
+document.addEventListener('DOMContentLoaded', () => {
+  // ... 现有的初始化代码 ...
+  
+  initWhitelist();
+  
+  document.getElementById('addWhitelist').addEventListener('click', addToWhitelist);
+  document.getElementById('whitelistInput').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      addToWhitelist();
+    }
+  });
+});
+
+// 优化现有的存储访问，使用 async/await
+async function updateSettings(key, value) {
+  try {
+    await chrome.storage.local.set({ [key]: value });
+  } catch (error) {
+    console.error(`Failed to update ${key}:`, error);
+  }
+}
