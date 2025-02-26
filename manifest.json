@@ -5,7 +5,6 @@
   "description": "自动关闭Chrome标签页的简单插件",
   "permissions": ["tabs", "alarms", "storage", "webNavigation", "notifications"],
   "host_permissions": ["<all_urls>"],
-  "optional_permissions": ["history"],
   "background": {
     "service_worker": "background.js"
   },

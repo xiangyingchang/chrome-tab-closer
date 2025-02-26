@@ -67,10 +67,8 @@ document.getElementById('testMode').addEventListener('change', async function(e)
     // 立即更新检查间隔
     const checkInterval = e.target.checked ? 0.5 : 5;
     await chrome.alarms.create('checkInactiveTabs', { periodInMinutes: checkInterval });
-    
-    console.log('[Tab Closer] 测试模式:', e.target.checked ? '开启' : '关闭');
   } catch (error) {
-    console.error('Failed to update test mode:', error);
+    // 静默处理错误
   }
 });
 

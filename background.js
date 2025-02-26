@@ -166,3 +166,12 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
     chrome.alarms.create('checkInactiveTabs', { periodInMinutes: checkInterval });
   }
 });
+
+// 优化现有的存储访问，使用 async/await
+async function updateSettings(key, value) {
+  try {
+    await chrome.storage.local.set({ [key]: value });
+  } catch (error) {
+    // 静默处理错误
+  }
+}
