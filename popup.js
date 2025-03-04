@@ -51,11 +51,16 @@ function debounce(func, wait) {
 
 // 使用防抖优化输入处理
 document.getElementById('inactiveThreshold').addEventListener('change', 
-  debounce(function(e) {
+  async function(e) {
     const hours = parseInt(e.target.value) || 24;
     const threshold = hours * 60 * 60 * 1000;
-    updateSettings('inactiveThreshold', threshold);
-  }, 300)
+    console.log(`设置不活跃阈值: ${hours}小时 (${threshold}毫秒)`);
+    await updateSettings('inactiveThreshold', threshold);
+    
+    // 立即检查当前设置
+    const settings = await chrome.storage.local.get(['inactiveThreshold']);
+    console.log(`保存后的阈值: ${settings.inactiveThreshold / (60 * 60 * 1000)}小时`);
+  }
 );
 
 // 添加测试模式控制
@@ -76,7 +81,20 @@ document.getElementById('testMode').addEventListener('change', async function(e)
 chrome.storage.local.get(['autoCloseEnabled', 'testMode', 'inactiveThreshold'], function(result) {
   document.getElementById('autoCloseInactive').checked = result.autoCloseEnabled || false;
   document.getElementById('testMode').checked = result.testMode || false;
-  document.getElementById('inactiveThreshold').value = result.inactiveThreshold ? (result.inactiveThreshold / (60 * 60 * 1000)) : 24;
+  
+  // 获取输入值
+  const inputElement = document.getElementById('inactiveThreshold');
+  const hours = parseInt(inputElement.value) || 24;
+  inputElement.value = hours;
+  
+  // 如果没有保存过阈值，则保存当前值
+  if (!result.inactiveThreshold) {
+    const threshold = hours * 60 * 60 * 1000;
+    updateSettings('inactiveThreshold', threshold);
+  } else {
+    // 显示保存的值
+    inputElement.value = result.inactiveThreshold / (60 * 60 * 1000);
+  }
 });
 
 // 白名单管理
@@ -154,6 +172,46 @@ document.addEventListener('DOMContentLoaded', () => {
       addToWhitelist();
     }
   });
+  
+  // 添加调试按钮
+  const settingsSection = document.querySelector('.settings-section');
+  const debugButton = document.createElement('button');
+  debugButton.textContent = '检查设置状态';
+  debugButton.style.marginTop = '16px';
+  debugButton.addEventListener('click', async () => {
+    const response = await chrome.runtime.sendMessage({action: 'getDebugInfo'});
+    console.log('Debug Info:', response);
+    alert('设置信息已输出到控制台，请按F12查看');
+  });
+  settingsSection.appendChild(debugButton);
+
+  // 添加强制检查按钮
+  const forceCheckButton = document.createElement('button');
+  forceCheckButton.textContent = '立即检查不活跃标签';
+  forceCheckButton.style.marginTop = '8px';
+  forceCheckButton.addEventListener('click', async () => {
+    await chrome.runtime.sendMessage({action: 'forceCheck'});
+    alert('已执行不活跃标签检查');
+  });
+  settingsSection.appendChild(forceCheckButton);
+
+  // 添加重置按钮
+  const resetButton = document.createElement('button');
+  resetButton.textContent = '重置所有标签时间';
+  resetButton.style.marginTop = '8px';
+  resetButton.style.backgroundColor = '#dc3545';
+  resetButton.addEventListener('click', async () => {
+    if (confirm('这将把所有非活跃标签的访问时间重置为24小时前，确定继续吗？')) {
+      const response = await chrome.runtime.sendMessage({
+        action: 'resetAllTabTimes',
+        hours: 24
+      });
+      alert(response.message);
+      // 立即执行检查
+      await chrome.runtime.sendMessage({action: 'forceCheck'});
+    }
+  });
+  settingsSection.appendChild(resetButton);
 });
 
 // 优化现有的存储访问，使用 async/await
