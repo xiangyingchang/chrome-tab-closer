@@ -25,12 +25,18 @@ document.getElementById('closeAll').addEventListener('click', function() {
 // 自动关闭不活跃标签的开关控制
 document.getElementById('autoCloseInactive').addEventListener('change', async function(e) {
   try {
+    await updateSettings('autoCloseEnabled', e.target.checked);
+    
     if (e.target.checked) {
-      await chrome.alarms.create('checkInactiveTabs', { periodInMinutes: 5 });
+      // 获取当前测试模式状态
+      const result = await chrome.storage.local.get(['testMode']);
+      const checkInterval = result.testMode ? 0.5 : 5;
+      await chrome.alarms.create('checkInactiveTabs', { periodInMinutes: checkInterval });
+      console.log('已启用自动关闭，检查间隔:', checkInterval, '分钟');
     } else {
       await chrome.alarms.clear('checkInactiveTabs');
+      console.log('已禁用自动关闭');
     }
-    await updateSettings('autoCloseEnabled', e.target.checked);
   } catch (error) {
     console.error('Failed to update auto close setting:', error);
   }
@@ -69,11 +75,16 @@ document.getElementById('testMode').addEventListener('change', async function(e)
     // 保存测试模式状态
     await chrome.storage.local.set({ testMode: e.target.checked });
     
-    // 立即更新检查间隔
-    const checkInterval = e.target.checked ? 0.5 : 5;
-    await chrome.alarms.create('checkInactiveTabs', { periodInMinutes: checkInterval });
+    // 检查自动关闭是否启用
+    const result = await chrome.storage.local.get(['autoCloseEnabled']);
+    if (result.autoCloseEnabled) {
+      // 立即更新检查间隔
+      const checkInterval = e.target.checked ? 0.5 : 5;
+      await chrome.alarms.create('checkInactiveTabs', { periodInMinutes: checkInterval });
+      console.log('测试模式已', e.target.checked ? '启用' : '禁用', '，检查间隔:', checkInterval, '分钟');
+    }
   } catch (error) {
-    // 静默处理错误
+    console.error('更新测试模式失败:', error);
   }
 });
 

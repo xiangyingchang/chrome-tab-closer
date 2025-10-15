@@ -3,13 +3,27 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
   try {
     const currentTime = Date.now();
     await chrome.storage.local.set({ [activeInfo.tabId.toString()]: currentTime });
+    console.log(`标签 ${activeInfo.tabId} 被激活，时间已更新`);
   } catch (error) {
-    // 静默处理错误
+    console.error('更新标签访问时间失败:', error);
   }
 });
 
-// 每5分钟检查一次不活跃的标签
-chrome.alarms.create('checkInactiveTabs', { periodInMinutes: 5 });
+// 监听标签页更新事件（用户访问新页面）
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url && !tab.url.startsWith('chrome://')) {
+    try {
+      const currentTime = Date.now();
+      await chrome.storage.local.set({ [tabId.toString()]: currentTime });
+      console.log(`标签 ${tabId} 页面加载完成，时间已更新`);
+    } catch (error) {
+      console.error('更新标签访问时间失败:', error);
+    }
+  }
+});
+
+// 初始化时不自动创建alarm，等用户启用后再创建
+// chrome.alarms.create('checkInactiveTabs', { periodInMinutes: 5 });
 
 // 合并所有定时任务的处理
 chrome.alarms.onAlarm.addListener(async (alarm) => {
@@ -27,14 +41,18 @@ function isValidUrl(url) {
   }
 }
 
-function checkAndCloseInactiveTabs() {
-  chrome.storage.local.get(['whitelist', 'autoCloseEnabled', 'inactiveThreshold', 'testMode'], async (result) => {
-    console.log("检查配置:", {
-      autoCloseEnabled: result.autoCloseEnabled,
-      testMode: result.testMode,
-      inactiveThreshold: result.inactiveThreshold,
-      inactiveThresholdHours: result.inactiveThreshold ? (result.inactiveThreshold / (60 * 60 * 1000)) : 'not set'
-    });
+async function checkAndCloseInactiveTabs() {
+  try {
+    const result = await chrome.storage.local.get(['whitelist', 'autoCloseEnabled', 'inactiveThreshold', 'testMode']);
+    // 性能优化：减少控制台输出频率
+    if (Math.random() < 0.1) { // 10%概率输出日志，减少性能影响
+      console.log("检查配置:", {
+        autoCloseEnabled: result.autoCloseEnabled,
+        testMode: result.testMode,
+        inactiveThreshold: result.inactiveThreshold,
+        inactiveThresholdHours: result.inactiveThreshold ? (result.inactiveThreshold / (60 * 60 * 1000)) : 'not set'
+      });
+    }
     
     if (!result.autoCloseEnabled) {
       console.log("自动关闭未启用");
@@ -97,7 +115,9 @@ function checkAndCloseInactiveTabs() {
         }
       }
     }
-  });
+  } catch (error) {
+    console.error('检查不活跃标签时出错:', error);
+  }
 }
 
 // 监听标签页关闭事件，清理存储的时间记录
@@ -159,25 +179,68 @@ function showCloseNotification(tab) {
 
 // 初始化定时任务
 async function initAlarms() {
-  const result = await chrome.storage.local.get(['testMode']);
-  const checkInterval = result.testMode ? 0.5 : 5;
-  await chrome.alarms.create('checkInactiveTabs', { 
-    periodInMinutes: checkInterval
-  });
+  try {
+    // 清除现有的alarm
+    await chrome.alarms.clear('checkInactiveTabs');
+    
+    const result = await chrome.storage.local.get(['testMode', 'autoCloseEnabled']);
+    
+    // 只有在启用自动关闭时才创建alarm
+    if (result.autoCloseEnabled) {
+      const checkInterval = result.testMode ? 0.5 : 5;
+      await chrome.alarms.create('checkInactiveTabs', { 
+        periodInMinutes: checkInterval
+      });
+      console.log(`已创建定时任务，检查间隔: ${checkInterval} 分钟`);
+    } else {
+      console.log('自动关闭未启用，跳过创建定时任务');
+    }
+  } catch (error) {
+    console.error('初始化定时任务失败:', error);
+  }
 }
 
 // 在插件启动和浏览器启动时初始化
-chrome.runtime.onInstalled.addListener(async () => {
-  const result = await chrome.storage.local.get(['inactiveThreshold']);
-  if (!result.inactiveThreshold) {
-    // 设置默认为12小时
-    const defaultThreshold = 12 * 60 * 60 * 1000;
-    await chrome.storage.local.set({ inactiveThreshold: defaultThreshold });
-    console.log("已设置默认不活跃阈值:", defaultThreshold);
+chrome.runtime.onInstalled.addListener(async (details) => {
+  console.log('插件安装/更新:', details.reason);
+  
+  try {
+    const result = await chrome.storage.local.get(['inactiveThreshold', 'autoCloseEnabled']);
+    
+    if (!result.inactiveThreshold) {
+      // 设置默认为24小时
+      const defaultThreshold = 24 * 60 * 60 * 1000;
+      await chrome.storage.local.set({ 
+        inactiveThreshold: defaultThreshold,
+        autoCloseEnabled: false // 默认关闭自动清理
+      });
+      console.log("已设置默认配置:", { threshold: defaultThreshold, enabled: false });
+    }
+    
+    await initAlarms();
+    
+    // 初始化所有当前标签的时间戳
+    const tabs = await chrome.tabs.query({});
+    const currentTime = Date.now();
+    const updates = {};
+    
+    for (const tab of tabs) {
+      updates[tab.id.toString()] = currentTime;
+    }
+    
+    if (Object.keys(updates).length > 0) {
+      await chrome.storage.local.set(updates);
+      console.log(`已初始化 ${Object.keys(updates).length} 个标签的时间戳`);
+    }
+  } catch (error) {
+    console.error('插件初始化失败:', error);
   }
-  initAlarms();
 });
-chrome.runtime.onStartup.addListener(initAlarms);
+
+chrome.runtime.onStartup.addListener(async () => {
+  console.log('浏览器启动');
+  await initAlarms();
+});
 
 // 在测试模式切换时更新检查间隔
 chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -199,28 +262,33 @@ async function updateSettings(key, value) {
 // 添加到 background.js 末尾
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'getDebugInfo') {
-    chrome.storage.local.get(null, async (data) => {
-      const tabs = await chrome.tabs.query({});
-      const tabInfo = tabs.map(tab => ({
-        id: tab.id,
-        title: tab.title,
-        url: tab.url,
-        lastAccess: data[tab.id.toString()] ? new Date(data[tab.id.toString()]).toLocaleString() : 'unknown'
-      }));
-      
-      const debugInfo = {
-        settings: {
-          autoCloseEnabled: data.autoCloseEnabled,
-          testMode: data.testMode,
-          inactiveThreshold: data.inactiveThreshold ? `${data.inactiveThreshold / (60 * 60 * 1000)} hours` : 'not set',
-          whitelist: data.whitelist || []
-        },
-        tabs: tabInfo,
-        currentTime: new Date().toLocaleString()
-      };
-      
-      sendResponse(debugInfo);
-    });
+    (async () => {
+      try {
+        const data = await chrome.storage.local.get(null);
+        const tabs = await chrome.tabs.query({});
+        const tabInfo = tabs.map(tab => ({
+          id: tab.id,
+          title: tab.title,
+          url: tab.url,
+          lastAccess: data[tab.id.toString()] ? new Date(data[tab.id.toString()]).toLocaleString() : 'unknown'
+        }));
+        
+        const debugInfo = {
+          settings: {
+            autoCloseEnabled: data.autoCloseEnabled,
+            testMode: data.testMode,
+            inactiveThreshold: data.inactiveThreshold ? `${data.inactiveThreshold / (60 * 60 * 1000)} hours` : 'not set',
+            whitelist: data.whitelist || []
+          },
+          tabs: tabInfo,
+          currentTime: new Date().toLocaleString()
+        };
+        
+        sendResponse(debugInfo);
+      } catch (error) {
+        sendResponse({ error: error.message });
+      }
+    })();
     return true; // 保持消息通道开放，等待异步响应
   }
 
@@ -231,22 +299,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.action === 'resetAllTabTimes') {
-    const hoursAgo = message.hours || 24;
-    const resetTime = Date.now() - (hoursAgo * 60 * 60 * 1000);
-    
-    const tabs = await chrome.tabs.query({});
-    const updates = tabs.reduce((acc, tab) => {
-      // 跳过当前活跃的标签
-      if (tab.active) return acc;
-      acc[tab.id.toString()] = resetTime;
-      return acc;
-    }, {});
-    
-    await chrome.storage.local.set(updates);
-    sendResponse({
-      success: true, 
-      message: `已将${Object.keys(updates).length}个标签的访问时间设置为${hoursAgo}小时前`
-    });
+    (async () => {
+      try {
+        const hoursAgo = message.hours || 24;
+        const resetTime = Date.now() - (hoursAgo * 60 * 60 * 1000);
+        
+        const tabs = await chrome.tabs.query({});
+        const updates = tabs.reduce((acc, tab) => {
+          // 跳过当前活跃的标签
+          if (tab.active) return acc;
+          acc[tab.id.toString()] = resetTime;
+          return acc;
+        }, {});
+        
+        await chrome.storage.local.set(updates);
+        sendResponse({
+          success: true, 
+          message: `已将${Object.keys(updates).length}个标签的访问时间设置为${hoursAgo}小时前`
+        });
+      } catch (error) {
+        sendResponse({ error: error.message });
+      }
+    })();
     return true;
   }
 });
